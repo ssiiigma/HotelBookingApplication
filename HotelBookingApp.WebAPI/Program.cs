@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls("http://0.0.0.0:10000");
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
@@ -83,7 +85,13 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+
+app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("AllowAll");
