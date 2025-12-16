@@ -10,7 +10,7 @@ services:
       MYSQL_USER: "hoteluser"
       MYSQL_PASSWORD: "HotelPassword123!"
     ports:
-      - "3307:3306"  # Різний порт, щоб не конфліктував з локальним MySQL
+      - "3307:3306"  
     volumes:
       - mysql_data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password
