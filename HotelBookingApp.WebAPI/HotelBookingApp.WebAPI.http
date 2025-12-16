@@ -1,0 +1,6 @@
+@HotelBookingApp.WebAPI_HostAddress = https://localhost:5010
+
+GET /api/hotels
+Accept: application/json
+
+###
