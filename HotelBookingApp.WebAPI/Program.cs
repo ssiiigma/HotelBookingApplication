@@ -35,8 +35,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(
-        connectionString,
-        ServerVersion.AutoDetect(connectionString),
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection")),
         mySqlOptions =>
         {
             mySqlOptions.EnableRetryOnFailure(
@@ -46,7 +46,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             );
         }
     ));
-
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -73,8 +72,6 @@ builder.Services.AddScoped<IApplicationDbContext>(provider =>
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IHotelService, HotelService>();
 
-builder.Services.AddScoped<IApplicationDbContext>(provider => 
-    provider.GetRequiredService<ApplicationDbContext>());
 
 
 builder.Services.AddHttpContextAccessor();
@@ -127,106 +124,127 @@ using (var scope = app.Services.CreateScope())
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         
-        await context.Database.MigrateAsync();
+        var canConnect = await context.Database.CanConnectAsync();
         
-        if (!await context.Hotels.AnyAsync())
+        if (canConnect)
         {
-            Console.WriteLine("Заповнення бази даних тестовими даними...");
-            
-            var hotel1 = new Hotel
+            try
             {
-                Name = "Grand Hotel & Spa",
-                City = "Kyiv",
-                Address = "Khreshchatyk St. 1",
-                Description = "Luxury 5-star hotel",
-                StarRating = 5,
-                PricePerNight = 6500,
-                HasPool = true,
-                HasSpa = true,
-                HasRestaurant = true,
-                HasFreeWiFi = true,
-                HasParking = true,
-                IsActive = true
-            };
-            
-            var hotel2 = new Hotel
+                var hotelsExist = await context.Hotels.AnyAsync();
+                
+                if (!hotelsExist)
+                {
+                    Console.WriteLine("Заповнення бази даних тестовими даними...");
+                    
+                    var hotel1 = new Hotel
+                    {
+                        Name = "Grand Hotel & Spa",
+                        City = "Kyiv",
+                        Address = "Khreshchatyk St. 1",
+                        Description = "Luxury 5-star hotel",
+                        StarRating = 5,
+                        PricePerNight = 6500,
+                        HasPool = true,
+                        HasSpa = true,
+                        HasRestaurant = true,
+                        HasFreeWiFi = true,
+                        HasParking = true,
+                        IsActive = true
+                    };
+                    
+                    var hotel2 = new Hotel
+                    {
+                        Name = "Historic Lviv Hotel",
+                        City = "Lviv",
+                        Address = "Rynok Square 15",
+                        Description = "Charming historic hotel",
+                        StarRating = 4,
+                        PricePerNight = 3200,
+                        HasRestaurant = true,
+                        HasFreeWiFi = true,
+                        IsActive = true
+                    };
+                    
+                    context.Hotels.AddRange(hotel1, hotel2);
+                    await context.SaveChangesAsync();
+                    
+                    var rooms = new List<Room>
+                    {
+                        new Room { RoomNumber = "101", RoomType = "Standard", Capacity = 2, PricePerNight = 2500, HotelId = hotel1.Id, IsAvailable = true },
+                        new Room { RoomNumber = "201", RoomType = "Deluxe", Capacity = 3, PricePerNight = 4500, HotelId = hotel1.Id, IsAvailable = true },
+                        new Room { RoomNumber = "102", RoomType = "Family", Capacity = 4, PricePerNight = 3500, HotelId = hotel2.Id, IsAvailable = true }
+                    };
+                    
+                    context.Rooms.AddRange(rooms);
+                    await context.SaveChangesAsync();
+                    
+                    Console.WriteLine($"Додано: 2 готелі, {rooms.Count} кімнат");
+                }
+            }
+            catch (Exception dbEx)
             {
-                Name = "Historic Lviv Hotel",
-                City = "Lviv",
-                Address = "Rynok Square 15",
-                Description = "Charming historic hotel",
-                StarRating = 4,
-                PricePerNight = 3200,
-                HasRestaurant = true,
-                HasFreeWiFi = true,
-                IsActive = true
-            };
+                Console.WriteLine($"Помилка роботи з БД: {dbEx.Message}");
+            }
             
-            context.Hotels.AddRange(hotel1, hotel2);
-            await context.SaveChangesAsync();
-            
-            var rooms = new List<Room>
+            try
             {
-                new Room { RoomNumber = "101", RoomType = "Standard", Capacity = 2, PricePerNight = 2500, HotelId = hotel1.Id, IsAvailable = true },
-                new Room { RoomNumber = "201", RoomType = "Deluxe", Capacity = 3, PricePerNight = 4500, HotelId = hotel1.Id, IsAvailable = true },
-                new Room { RoomNumber = "102", RoomType = "Family", Capacity = 4, PricePerNight = 3500, HotelId = hotel2.Id, IsAvailable = true }
-            };
-            
-            context.Rooms.AddRange(rooms);
-            await context.SaveChangesAsync();
-            
-            Console.WriteLine($"Додано: 2 готелі, {rooms.Count} кімнат");
+                if (!await roleManager.RoleExistsAsync("Admin"))
+                    await roleManager.CreateAsync(new IdentityRole("Admin"));
+                    
+                if (!await roleManager.RoleExistsAsync("Customer"))
+                    await roleManager.CreateAsync(new IdentityRole("Customer"));
+                    
+                var adminEmail = "admin@example.com";
+                if (await userManager.FindByEmailAsync(adminEmail) == null)
+                {
+                    var adminUser = new ApplicationUser
+                    {
+                        UserName = adminEmail,
+                        Email = adminEmail,
+                        FirstName = "Admin",
+                        LastName = "User",
+                        EmailConfirmed = true,
+                        IsActive = true
+                    };
+                    
+                    var result = await userManager.CreateAsync(adminUser, "Admin123!");
+                    if (result.Succeeded)
+                        await userManager.AddToRoleAsync(adminUser, "Admin");
+                }
+                
+                var customerEmail = "customer@example.com";
+                if (await userManager.FindByEmailAsync(customerEmail) == null)
+                {
+                    var customerUser = new ApplicationUser
+                    {
+                        UserName = customerEmail,
+                        Email = customerEmail,
+                        FirstName = "John",
+                        LastName = "Client",
+                        EmailConfirmed = true,
+                        IsActive = true
+                    };
+                    
+                    var result = await userManager.CreateAsync(customerUser, "Customer123!");
+                    if (result.Succeeded)
+                        await userManager.AddToRoleAsync(customerUser, "Customer");
+                }
+                
+                Console.WriteLine("Identity ініціалізовано");
+            }
+            catch (Exception identityEx)
+            {
+                Console.WriteLine($"Помилка Identity: {identityEx.Message}");
+            }
         }
-        
-        if (!await roleManager.RoleExistsAsync("Admin"))
-            await roleManager.CreateAsync(new IdentityRole("Admin"));
-            
-        if (!await roleManager.RoleExistsAsync("Customer"))
-            await roleManager.CreateAsync(new IdentityRole("Customer"));
-        
-        var adminEmail = "admin@example.com";
-        if (await userManager.FindByEmailAsync(adminEmail) == null)
+        else
         {
-            var adminUser = new ApplicationUser
-            {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FirstName = "Admin",
-                LastName = "User",
-                EmailConfirmed = true,
-                IsActive = true
-            };
-            
-            var result = await userManager.CreateAsync(adminUser, "Admin123!");
-            if (result.Succeeded)
-                await userManager.AddToRoleAsync(adminUser, "Admin");
+            Console.WriteLine("Не вдається підключитись до БД");
         }
-        
-        var customerEmail = "customer@example.com";
-        if (await userManager.FindByEmailAsync(customerEmail) == null)
-        {
-            var customerUser = new ApplicationUser
-            {
-                UserName = customerEmail,
-                Email = customerEmail,
-                FirstName = "John",
-                LastName = "Client",
-                EmailConfirmed = true,
-                IsActive = true
-            };
-            
-            var result = await userManager.CreateAsync(customerUser, "Customer123!");
-            if (result.Succeeded)
-                await userManager.AddToRoleAsync(customerUser, "Customer");
-        }
-        
-        Console.WriteLine("База даних та Identity ініціалізовано");
     }
     catch (Exception ex)
     {
         Console.WriteLine($"Помилка ініціалізації БД: {ex.Message}");
-        if (ex.InnerException != null)
-            Console.WriteLine($"Внутрішня помилка: {ex.InnerException.Message}");
     }
 }
 
