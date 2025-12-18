@@ -9,7 +9,6 @@ namespace HotelBookingApp.Infrastructure.Data
         {
             var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
-            // Встав свій connection string
             var connectionString = "server=localhost;database=HotelBookingDB;user=root;password=11111";
 
             optionsBuilder.UseMySql(
